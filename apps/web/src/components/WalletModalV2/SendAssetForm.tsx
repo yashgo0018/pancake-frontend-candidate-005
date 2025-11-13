@@ -37,7 +37,7 @@ import { SendGiftToggle } from 'views/Gift/components/SendGiftToggle'
 import { CHAINS_WITH_GIFT_CLAIM } from 'views/Gift/constants'
 import { SendGiftContext, useSendGiftContext } from 'views/Gift/providers/SendGiftProvider'
 import { useUserInsufficientBalanceLight } from 'views/SwapSimplify/hooks/useUserInsufficientBalance'
-import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
+import { useAccount, useEnsAddress, usePublicClient, useSendTransaction } from 'wagmi'
 import { ActionButton } from './ActionButton'
 import SendTransactionFlow from './SendTransactionFlow'
 import { ViewState } from './type'
@@ -98,8 +98,9 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
   const isSendGiftSupported = isSendGift && isGiftSupported
 
   const { t } = useTranslation()
-  const [address, setAddress] = useState<string | null>(null)
-  const debouncedAddress = useDebounce(address, 500)
+  const [addressFieldInput, setAddressFieldInput] = useState<string | null>(null)
+  const debouncedAddress = useDebounce(addressFieldInput, 500)
+  const { data: ensAddress } = useEnsAddress({ name: debouncedAddress || undefined, chainId: ChainId.ETHEREUM })
   const [amount, setAmount] = useState('')
   const [addressError, setAddressError] = useState('')
   const [estimatedFee, setEstimatedFee] = useState<string | null>(null)
@@ -112,6 +113,13 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
   const { toastSuccess } = useToast()
   const { fetchWithCatchTxError, loading: attemptingTxn } = useCatchTxError()
   const { includeStarterGas, nativeAmount, isUserInsufficientBalance } = useSendGiftContext()
+
+  const resolvedReceiverAddress = useMemo(() => {
+    if (ensAddress && zeroAddress !== ensAddress) {
+      return ensAddress as `0x${string}`
+    }
+    return addressFieldInput as `0x${string}`
+  }, [ensAddress, addressFieldInput])
 
   // Get native currency for fee calculation
   const nativeCurrency = useNativeCurrency(asset.chainId)
@@ -139,7 +147,7 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
   const { sendTransactionAsync } = useSendTransaction()
 
   const estimateTransactionFee = useCallback(async () => {
-    if (!address || !amount || !publicClient || !accountAddress) return
+    if (!resolvedReceiverAddress || !amount || !publicClient || !accountAddress) return
 
     try {
       let gasEstimate: bigint = 0n
@@ -149,13 +157,13 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
         gasEstimate =
           (await publicClient.estimateGas({
             account: accountAddress,
-            to: address as `0x${string}`,
+            to: resolvedReceiverAddress as `0x${string}`,
             value: tryParseAmount(amount, currency)?.quotient ?? 0n,
           })) ?? 0n
       } else {
         // For ERC20 tokens, estimate gas for a transfer call
         const transferData = {
-          to: address as `0x${string}`,
+          to: resolvedReceiverAddress as `0x${string}`,
           amount: tryParseAmount(amount, currency)?.quotient ?? 0n,
         }
         gasEstimate =
@@ -187,7 +195,16 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
       setEstimatedFee(null)
       setEstimatedFeeUsd(null)
     }
-  }, [address, amount, publicClient, accountAddress, isNativeToken, currency, nativeCurrencyPrice, erc20Contract])
+  }, [
+    resolvedReceiverAddress,
+    amount,
+    publicClient,
+    accountAddress,
+    isNativeToken,
+    currency,
+    nativeCurrencyPrice,
+    erc20Contract,
+  ])
 
   const sendAsset = useCallback(async () => {
     const amounts = tryParseAmount(amount, currency)
@@ -196,13 +213,13 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
       if (isNativeToken) {
         // Handle native token transfer
         return sendTransactionAsync({
-          to: address as `0x${string}`,
+          to: resolvedReceiverAddress as `0x${string}`,
           value: amounts?.quotient ?? 0n,
           chainId: asset.chainId,
         })
       }
       // Handle ERC20 token transfer
-      return erc20Contract?.write?.transfer([address as `0x${string}`, amounts?.quotient ?? 0n], {
+      return erc20Contract?.write?.transfer([resolvedReceiverAddress as `0x${string}`, amounts?.quotient ?? 0n], {
         account: erc20Contract.account!,
         chain: erc20Contract.chain!,
       })
@@ -215,18 +232,21 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
         <ToastDescriptionWithTx txHash={receipt.transactionHash}>
           {t('Your %symbol% has been sent to %address%', {
             symbol: currency?.symbol,
-            address: `${address?.slice(0, 8)}...${address?.slice(-8)}`,
+            address: ensAddress
+              ? addressFieldInput!
+              : `${addressFieldInput?.slice(0, 8)}...${addressFieldInput?.slice(-8)}`,
           })}
         </ToastDescriptionWithTx>,
       )
       // Reset form after successful transaction
       setAmount('')
-      setAddress('')
+      setAddressFieldInput('')
     }
 
     return receipt
   }, [
-    address,
+    addressFieldInput,
+    resolvedReceiverAddress,
     amount,
     erc20Contract,
     isNativeToken,
@@ -240,20 +260,20 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target
-    setAddress(value)
+    setAddressFieldInput(value)
   }
 
   // Use debounced address for validation to avoid checking on every keystroke
   useEffect(() => {
-    if (debouncedAddress && !isAddress(debouncedAddress)) {
+    if (debouncedAddress && !isAddress(debouncedAddress) && !ensAddress) {
       setAddressError(t('Invalid wallet address'))
     } else {
       setAddressError('')
     }
-  }, [debouncedAddress, t])
+  }, [debouncedAddress, ensAddress, t])
 
   const handleClearAddress = () => {
-    setAddress('')
+    setAddressFieldInput('')
     setAddressError('')
   }
 
@@ -301,17 +321,17 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
 
   // Effect to estimate fee when address and amount are valid
   useEffect(() => {
-    if (address && amount && !addressError) {
+    if (resolvedReceiverAddress && amount && !addressError) {
       estimateTransactionFee()
     } else {
       setEstimatedFee(null)
     }
-  }, [address, amount, addressError, estimateTransactionFee])
+  }, [resolvedReceiverAddress, amount, addressError, estimateTransactionFee])
 
   const isValidAddress = useMemo(() => {
     // send gift doesn't need to check address
-    return isSendGiftSupported ? true : address && !addressError
-  }, [address, addressError, isSendGiftSupported])
+    return isSendGiftSupported ? true : resolvedReceiverAddress && !addressError
+  }, [resolvedReceiverAddress, addressError, isSendGiftSupported])
 
   if (viewState === ViewState.CONFIRM_TRANSACTION && isSendGiftSupported) {
     return <CreateGiftView key={viewState} tokenAmount={tokenAmount} />
@@ -322,7 +342,7 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
       <SendTransactionFlow
         asset={asset}
         amount={amount}
-        recipient={address as string}
+        recipient={resolvedReceiverAddress as string}
         onDismiss={() => {
           onViewStateChange(ViewState.SEND_ASSETS)
           setTxHash(undefined)
@@ -356,13 +376,13 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
                 <AddressInputWrapper>
                   <Box position="relative">
                     <Input
-                      value={address ?? ''}
+                      value={addressFieldInput ?? ''}
                       onChange={handleAddressChange}
                       placeholder="Recipient address"
                       style={{ height: '64px' }}
                       isError={Boolean(addressError)}
                     />
-                    {address && (
+                    {addressFieldInput && (
                       <ClearButton
                         scale="sm"
                         onClick={handleClearAddress}
