@@ -14,6 +14,8 @@ import { useSocialLoginProviderAtom } from '../../contexts/Privy/atom'
 interface CopyAddressProps extends FlexProps {
   account: string | undefined
   tooltipMessage: string
+  ensName?: string
+  ensAvatar?: string
 }
 
 const Wrapper = styled(Flex)`
@@ -61,6 +63,28 @@ const WalletAddress = styled(Text)`
   margin-right: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
+`
+
+const EnsName = styled(Text)`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSubtle};
+  margin-top: 2px;
+`
+
+const EnsAvatarWrapper = styled(Box)`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 12px;
+  flex-shrink: 0;
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.1);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 `
 
 const CopyButtonWrapper = styled(Box)`
@@ -128,6 +152,8 @@ const SOCIAL_LOGIN_ICONS = {
 export const CopyAddress: React.FC<React.PropsWithChildren<CopyAddressProps>> = ({
   account,
   tooltipMessage,
+  ensName,
+  ensAvatar,
   ...props
 }) => {
   const { connectAsync } = useConnect()
@@ -159,21 +185,28 @@ export const CopyAddress: React.FC<React.PropsWithChildren<CopyAddressProps>> = 
   return (
     <Box position="relative" {...props} onClick={(e) => e.stopPropagation()}>
       <Wrapper>
-        <WalletIcon>
-          {socialIcon ? (
-            <SocialIconWrapper $needsWhiteBg={needsWhiteBackground}>
-              <Image src={socialIcon} width={32} height={32} alt="Social Login" />
-            </SocialIconWrapper>
-          ) : wallet?.icon ? (
-            <Image src={wallet?.icon as string} width={40} height={40} alt="Wallet" />
-          ) : dappIcon ? (
-            <Image src={dappIcon} width={40} height={40} alt="Wallet" />
-          ) : (
-            <WalletFilledV2Icon width={28} height={28} color="primary" />
-          )}
-        </WalletIcon>
+        {ensAvatar ? (
+          <EnsAvatarWrapper>
+            <img src={ensAvatar} alt="ENS Avatar" />
+          </EnsAvatarWrapper>
+        ) : (
+          <WalletIcon>
+            {socialIcon ? (
+              <SocialIconWrapper $needsWhiteBg={needsWhiteBackground}>
+                <Image src={socialIcon} width={32} height={32} alt="Social Login" />
+              </SocialIconWrapper>
+            ) : wallet?.icon ? (
+              <Image src={wallet?.icon as string} width={40} height={40} alt="Wallet" />
+            ) : dappIcon ? (
+              <Image src={dappIcon} width={40} height={40} alt="Wallet" />
+            ) : (
+              <WalletFilledV2Icon width={28} height={28} color="primary" />
+            )}
+          </WalletIcon>
+        )}
         <AddressBox>
           <WalletAddress title={account}>{formatAddress(account)}</WalletAddress>
+          {ensName && <EnsName>{ensName}</EnsName>}
         </AddressBox>
         <CopyButtonWrapper>
           <CopyButton width="16px" text={account ?? ''} tooltipMessage={tooltipMessage} />

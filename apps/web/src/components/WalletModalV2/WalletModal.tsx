@@ -20,6 +20,7 @@ import { TabsComponent } from 'components/Menu/UserMenu/WalletModal'
 import { usePrivy } from '@privy-io/react-auth'
 import { ASSET_CDN } from 'config/constants/endpoints'
 import { useAddressBalance } from 'hooks/useAddressBalance'
+import { useDomainNameForAddress } from 'hooks/useDomain'
 import { useRouter } from 'next/router'
 import React, { useCallback, useMemo } from 'react'
 import styled from 'styled-components'
@@ -136,6 +137,7 @@ export const WalletContent = ({
   const { viewState, setViewState, goBack, setSendEntry } = useWalletModalV2ViewState()
   const { theme } = useTheme()
   const { authenticated, ready, user, createWallet, setWalletRecovery, enrollInMfa } = usePrivy()
+  const { domainName, avatar } = useDomainNameForAddress(account ?? '')
 
   // Fetch balances using the hook we created
   const { balances, isLoading, totalBalanceUsd } = useAddressBalance(account, {
@@ -205,7 +207,12 @@ export const WalletContent = ({
             </Button>
           )}
 
-          <CopyAddress tooltipMessage={t('Copied')} account={account || ''} />
+          <CopyAddress
+            tooltipMessage={t('Copied')}
+            account={account || ''}
+            ensName={domainName || undefined}
+            ensAvatar={avatar}
+          />
           {viewState <= ViewState.SEND_ASSETS && (
             <FlexGap>
               <DisconnectButton scale="xs" onClick={onDisconnect}>

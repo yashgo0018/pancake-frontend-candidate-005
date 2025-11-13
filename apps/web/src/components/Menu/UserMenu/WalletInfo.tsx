@@ -4,7 +4,6 @@ import { WNATIVE } from '@pancakeswap/sdk'
 import {
   Box,
   Button,
-  CopyAddress,
   Flex,
   FlexGap,
   InfoFilledIcon,
@@ -17,6 +16,7 @@ import {
   TooltipText,
   useTooltip,
 } from '@pancakeswap/uikit'
+import { CopyAddress } from 'components/WalletModalV2/WalletCopyButton'
 import { ChainLogo } from 'components/Logo/ChainLogo'
 import { FetchStatus } from 'config/constants/types'
 import useAuth from 'hooks/useAuth'
@@ -48,7 +48,7 @@ const WalletInfo: React.FC<WalletInfoProps> = ({ hasLowNativeBalance, onDismiss 
   const { t } = useTranslation()
   const { chainId } = useActiveChainId()
   const { address: account, chain } = useAccount()
-  const { domainName } = useDomainNameForAddress(account ?? '')
+  const { domainName, avatar } = useDomainNameForAddress(account ?? '')
   const isBSC = chainId === ChainId.BSC
   const bnbBalance = useBalance({ address: account ?? undefined, chainId: ChainId.BSC })
   const nativeBalance = useBalance({ address: account ?? undefined, query: { enabled: !isBSC } })
@@ -100,10 +100,14 @@ const WalletInfo: React.FC<WalletInfoProps> = ({ hasLowNativeBalance, onDismiss 
       <Text color="secondary" fontSize="12px" textTransform="uppercase" fontWeight="bold" mb="8px">
         {t('Your Address')}
       </Text>
-      <FlexGap flexDirection="column" mb="24px" gap="8px">
-        <CopyAddress tooltipMessage={t('Copied')} account={account ?? undefined} />
-        {domainName ? <Text color="textSubtle">{domainName}</Text> : null}
-      </FlexGap>
+      <Box mb="24px">
+        <CopyAddress
+          tooltipMessage={t('Copied')}
+          account={account ?? undefined}
+          ensName={domainName || undefined}
+          ensAvatar={avatar}
+        />
+      </Box>
       {hasLowNativeBalance && (
         <Message variant="warning" mb="24px">
           <Box>
